@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Drift Platformer</title>
+<link rel="icon" type="image/png" href="1780498231884.png">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<style>
+body { margin: 0; background: #000; overflow: hidden; font-family: 'Segoe UI', sans-serif; touch-action: none; }
+canvas { display: block; touch-action: none; }
+.ui-overlay { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; color: white; text-align: center; z-index: 2000; background: rgba(0,0,0,0.85); }
+.hidden { display: none !important; }
+#hud { position: absolute; top: 20px; left: 20px; color: white; font-size: 22px; z-index: 100; pointer-events: none; font-weight: bold; text-shadow: 2px 2px 4px #000; }
+#topRight { position: absolute; top: 20px; right: 20px; display: flex; flex-direction: column; gap: 15px; z-index: 3000; }
+.icon-btn { width: 50px; height: 50px; border-radius: 50%; background: rgba(255,255,255,0.1); border: 2px solid rgba(255,255,255,0.3); color: white; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 24px; transition: 0.3s ease; opacity: 0.3; }
+.icon-btn:hover { opacity: 1; transform: scale(1.1); }
+#shopMenu, #settingsMenu { background: #1a1a1a; border: 2px solid #333; border-radius: 20px; padding: 25px; width: 320px; }
+.shop-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin: 20px 0; }
+.shop-item { background: #222; padding: 10px; border-radius: 12px; border: 2px solid transparent; cursor: pointer; }
+.shop-item.owned { border-color: #555; }
+.shop-item.equipped { border-color: #00ff00; background: #1a331a; }
+.color-preview { width: 100%; height: 40px; border-radius: 6px; margin-bottom: 5px; }
+.setting-row { display: flex; justify-content: space-between; align-items: center; margin: 20px 0; font-weight: bold; }
+.switch { position: relative; display: inline-block; width: 50px; height: 26px; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.slider { position: absolute; cursor: pointer; inset: 0; background-color: #444; transition: .4s; border-radius: 34px; }
+.slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
+input:checked + .slider { background-color: #00ff00; }
+input:checked + .slider:before { transform: translateX(24px); }
+.main-btn { padding: 12px 25px; background: #00ff00; border: none; font-weight: bold; border-radius: 8px; cursor: pointer; margin: 5px; }
+.danger-btn { padding: 12px 25px; background: #ff4444; color: white; border: none; font-weight: bold; border-radius: 8px; cursor: pointer; margin: 5px; }
+#controls { position: absolute; bottom: 30px; left: 0; width: 100%; display: flex; justify-content: space-between; align-items: flex-end; padding: 0 25px; box-sizing: border-box; z-index: 1500; pointer-events: none; }
+#joystick { width: 120px; height: 120px; background: rgba(255,255,255,0.1); border: 2px solid rgba(255,255,255,0.2); border-radius: 50%; position: relative; pointer-events: auto; touch-action: none; }
+#nub { width: 44px; height: 44px; background: white; border-radius: 50%; position: absolute; top: 38px; left: 38px; }
+#jumpBtn { width: 85px; height: 85px; background: rgba(0,255,0,0.3); border: 2px solid rgba(0,255,0,0.5); border-radius: 50%; display:flex; align-items:center; justify-content:center; pointer-events:auto; color:white; font-weight:bold; touch-action: none; user-select: none; }
+</style>
+</head>
+<body>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+<div id="topRight">
+<button id="shopBtn" class="icon-btn">🛒</button>
+<button id="gearBtn" class="icon-btn">⚙</button>
+<button id="fsBtn" class="icon-btn">⛶</button>
+</div>
+
+<div id="hud" class="hidden">LEVEL: <span id="lvlVal">1</span> | COINS: <span id="coinVal">0</span></div>
+
+<div id="startScreen" class="ui-overlay">
+<h1 style="color:#00ff00;">DRIFT</h1>
+<button id="singleBtn" class="main-btn">START GAME</button>
+<p>Balance: <span class="totalCoinsDisp">0</span>$</p>
+</div>
+
+<div id="gameOverScreen" class="ui-overlay hidden">
+<h1 style="color:#ff4444;">GAME OVER</h1>
+<p>You fell off the map.</p>
+<button id="retryBtn" class="main-btn">TRY AGAIN</button>
+<button id="backToMenuBtn" class="danger-btn">MAIN MENU</button>
+</div>
+
+<div id="shopOverlay" class="ui-overlay hidden">
+<div id="shopMenu">
+<h2>SKIN SHOP</h2>
+<p>Balance: <span class="totalCoinsDisp">0</span>$</p>
+<div class="shop-grid" id="shopGrid"></div>
+<button id="closeShop" class="main-btn">BACK</button>
+</div>
+</div>
+
+<div id="settingsOverlay" class="ui-overlay hidden">
+<div id="settingsMenu">
+<h2>SETTINGS</h2>
+<div class="setting-row">
+<span>Music</span>
+<label class="switch">
+<input type="checkbox" id="musicToggle">
+<span class="slider"></span>
+</label>
+</div>
+<div class="setting-row">
+<span>Mobile UI</span>
+<label class="switch">
+<input type="checkbox" id="mobileToggle">
+<span class="slider"></span>
+</label>
+</div>
+<button id="resetCoinsBtn" class="danger-btn">RESET</button>
+<button id="closeSettings" class="main-btn">BACK</button>
+</div>
+</div>
+
+<div id="controls" class="hidden">
+<div id="joystick"><div id="nub"></div></div>
+<div id="jumpBtn">JUMP</div>
+</div>
+
+<script>
+/* ... Rest of your game logic (unchanged) ... */
+let config = {
+ coins: parseInt(localStorage.getItem('cfg_coins')) || 0,
+ ownedColors: JSON.parse(localStorage.getItem('cfg_owned') || '[0]'),
+ equippedColor: parseInt(localStorage.getItem('cfg_equipped')),
+ music: localStorage.getItem('cfg_music') !== 'false',
+ mobile: localStorage.getItem('cfg_mobile') === 'true'
+};
+if (!Number.isInteger(config.equippedColor) || config.equippedColor < 0) config.equippedColor = 0;
+config.ownedColors = [...new Set(config.ownedColors)];
+
+const colors = [
+ {hex:0x00ff00, price:0},
+ {hex:0xff0000, price:50},
+ {hex:0x0000ff, price:50},
+ {hex:0xffff00, price:100},
+ {hex:0xff00ff, price:150},
+ {hex:0x00ffff, price:200}
+];
+
+if (config.equippedColor >= colors.length) config.equippedColor = 0;
+if (!config.ownedColors.includes(config.equippedColor)) config.equippedColor = 0;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x050505);
+const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+document.body.appendChild(renderer.domElement);
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+dirLight.position.set(10, 20, 10);
+scene.add(dirLight);
+
+let player, platforms = [], coins = [], goal;
+let pVel = new THREE.Vector3();
+let keys = { w:0, a:0, s:0, d:0 };
+let jumps = 0;
+let mode = 'start';
+let currentLevel = 1;
+const friction = 0.88, accel = 0.018, jumpForce = 0.26;
+let camYaw = 0;
+let camPitch = 0.25;
+let camDist = 11;
+let joyX = 0, joyY = 0, joyId = null;
+let draggingCamera = false;
+let lastCamX = 0;
+let lastCamY = 0;
+let cameraPointerId = null;
+
+const coinLabelTexture = (() => {
+ const canvas = document.createElement('canvas');
+ canvas.width = 512;
+ canvas.height = 512;
+ const ctx = canvas.getContext('2d');
+ ctx.clearRect(0, 0, 512, 512);
+ ctx.fillStyle = '#ffd400';
+ ctx.shadowColor = '#000000';
+ ctx.shadowBlur = 8;
+ ctx.lineWidth = 12;
+ ctx.strokeStyle = '#9b6a00';
+ ctx.font = 'bold 300px Arial';
+ ctx.textAlign = 'center';
+ ctx.textBaseline = 'middle';
+ ctx.strokeText('$', 256, 270);
+ ctx.fillText('$', 256, 270);
+ return new THREE.CanvasTexture(canvas);
+})();
+
+function saveConfig() {
+ localStorage.setItem('cfg_coins', String(config.coins));
+ localStorage.setItem('cfg_owned', JSON.stringify([...new Set(config.ownedColors)]));
+ localStorage.setItem('cfg_equipped', String(config.equippedColor));
+ localStorage.setItem('cfg_music', String(config.music));
+ localStorage.setItem('cfg_mobile', String(config.mobile));
+}
+
+function clearLevel() {
+ platforms.forEach(p => scene.remove(p));
+ coins.forEach(c => scene.remove(c));
+ if (goal) scene.remove(goal);
+ platforms = [];
+ coins = [];
+ goal = null;
+}
+
+function buildLevel() {
+ clearLevel();
+ let last = new THREE.Vector3(0, -1, 0);
+ let lastPlatform = null;
+ for (let i = 0; i < 12 + currentLevel; i++) {
+  const plat = new THREE.Mesh(new THREE.BoxGeometry(4, 0.5, 4), new THREE.MeshStandardMaterial({ color: 0x333333 }));
+  plat.position.copy(last);
+  scene.add(plat);
+  platforms.push(plat);
+  lastPlatform = plat;
+  if (i > 0 && Math.random() > 0.5) {
+   const coin = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 0.08, 24), new THREE.MeshStandardMaterial({ color: 0xffd700, metalness: 0.5, roughness: 0.25, emissive: 0x332200 }));
+   coin.rotation.x = Math.PI / 2;
+   coin.position.set(plat.position.x, plat.position.y + 1.2, plat.position.z);
+   const label = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 1.1), new THREE.MeshBasicMaterial({ map: coinLabelTexture, transparent: true, depthWrite: false }));
+   label.position.set(0, 0, 0.09);
+   coin.add(label);
+   scene.add(coin);
+   coins.push(coin);
+  }
+  if (i < 11 + currentLevel) {
+   last.x += (Math.random() - 0.5) * 8;
+   last.z -= 6;
+   last.y += (Math.random() - 0.5) * 1.5;
+  }
+ }
+ if (lastPlatform) {
+  goal = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.15, 2.8), new THREE.MeshStandardMaterial({ color: 0xffff00, emissive: 0x665500 }));
+  goal.position.set(lastPlatform.position.x, lastPlatform.position.y + 0.33, lastPlatform.position.z);
+  scene.add(goal);
+ }
+ if (!player) {
+  player = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: colors[config.equippedColor].hex }));
+  scene.add(player);
+ }
+ player.material.color.setHex(colors[config.equippedColor].hex);
+ player.position.set(0, 1, 0);
+ pVel.set(0, 0, 0);
+ jumps = 0;
+}
+
+function updateUI() {
+ document.getElementById('startScreen').classList.toggle('hidden', mode !== 'start');
+ document.getElementById('gameOverScreen').classList.toggle('hidden', mode !== 'gameover');
+ document.getElementById('hud').classList.toggle('hidden', mode !== 'game');
+ document.getElementById('controls').classList.toggle('hidden', !(mode === 'game' && config.mobile));
+ document.getElementById('lvlVal').innerText = currentLevel;
+ document.getElementById('coinVal').innerText = config.coins;
+ document.querySelectorAll('.totalCoinsDisp').forEach(el => el.innerText = config.coins);
+}
+
+function renderShop() {
+ const grid = document.getElementById('shopGrid');
+ grid.innerHTML = '';
+ colors.forEach((c, i) => {
+  const div = document.createElement('div');
+  div.className = 'shop-item';
+  if (config.ownedColors.includes(i)) div.classList.add('owned');
+  if (config.equippedColor === i) div.classList.add('equipped');
+  div.innerHTML = `<div class="color-preview" style="background:#${c.hex.toString(16).padStart(6,'0')}"></div><div>${config.ownedColors.includes(i) ? 'Owned' : '$' + c.price}</div>`;
+  div.onclick = () => {
+   if (!config.ownedColors.includes(i) && config.coins >= c.price) {
+    config.coins -= c.price;
+    config.ownedColors.push(i);
+   } else if (config.ownedColors.includes(i)) {
+    config.equippedColor = i;
+   }
+   saveConfig();
+   if (player) player.material.color.setHex(colors[config.equippedColor].hex);
+   renderShop();
+   updateUI();
+  };
+  grid.appendChild(div);
+ });
+}
+
+function startGame() { mode = 'game'; currentLevel = 1; buildLevel(); updateUI(); }
+
+document.getElementById('singleBtn').onclick = startGame;
+document.getElementById('retryBtn').onclick = () => { mode = 'game'; currentLevel = 1; buildLevel(); updateUI(); };
+document.getElementById('backToMenuBtn').onclick = () => { mode = 'start'; updateUI(); };
+
+document.getElementById('shopBtn').onclick = () => { renderShop(); document.getElementById('shopOverlay').classList.remove('hidden'); };
+document.getElementById('closeShop').onclick = () => document.getElementById('shopOverlay').classList.add('hidden');
+
+document.getElementById('gearBtn').onclick = () => {
+ document.getElementById('settingsOverlay').classList.remove('hidden');
+ document.getElementById('musicToggle').checked = config.music;
+ document.getElementById('mobileToggle').checked = config.mobile;
+};
+
+document.getElementById('closeSettings').onclick = () => document.getElementById('settingsOverlay').classList.add('hidden');
+
+document.getElementById('resetCoinsBtn').onclick = () => {
+ if (confirm('Reset coins and skins?')) {
+  config.coins = 0;
+  config.ownedColors = [0];
+  config.equippedColor = 0;
+  saveConfig();
+  updateUI();
+  renderShop();
+  if (player) player.material.color.setHex(colors[0].hex);
+ }
+};
+
+document.getElementById('musicToggle').onchange = (e) => { config.music = e.target.checked; saveConfig(); };
+document.getElementById('mobileToggle').onchange = (e) => { config.mobile = e.target.checked; saveConfig(); updateUI(); };
+
+document.getElementById('fsBtn').onclick = () => {
+ if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+ else document.exitFullscreen();
+};
+
+window.onkeydown = (e) => {
+ const k = e.key.toLowerCase();
+ if (k in keys) keys[k] = 1;
+ if (e.code === 'Space' && jumps < 2 && mode === 'game') { pVel.y = jumpForce; jumps++; }
+};
+window.onkeyup = (e) => { const k = e.key.toLowerCase(); if (k in keys) keys[k] = 0; };
+
+function updateCamera() {
+ const target = player.position.clone();
+ const offset = new THREE.Vector3(
+  Math.sin(camYaw) * Math.cos(camPitch) * camDist,
+  Math.sin(camPitch) * camDist,
+  Math.cos(camYaw) * Math.cos(camPitch) * camDist
+ );
+ camera.position.copy(target.clone().add(offset));
+ camera.lookAt(target);
+}
+function faceCamera() { player.rotation.y = camYaw + Math.PI; }
+
+const joyEl = document.getElementById('joystick');
+const nubEl = document.getElementById('nub');
+const jumpBtn = document.getElementById('jumpBtn');
+
+joyEl.addEventListener('pointerdown', (e) => {
+ joyId = e.pointerId;
+ joyEl.setPointerCapture(joyId);
+});
+joyEl.addEventListener('pointermove', (e) => {
+ if (e.pointerId !== joyId) return;
+ const r = joyEl.getBoundingClientRect();
+ const cx = r.left + r.width / 2;
+ const cy = r.top + r.height / 2;
+ const dx = e.clientX - cx;
+ const dy = e.clientY - cy;
+ const max = r.width / 2 - 22;
+ joyX = Math.max(-1, Math.min(1, dx / max));
+ joyY = Math.max(-1, Math.min(1, dy / max));
+ nubEl.style.left = (r.width / 2 - 22 + joyX * max) + 'px';
+ nubEl.style.top = (r.height / 2 - 22 + joyY * max) + 'px';
+});
+function resetJoy() { joyX = 0; joyY = 0; nubEl.style.left = '38px'; nubEl.style.top = '38px'; joyId = null; }
+joyEl.addEventListener('pointerup', resetJoy);
+joyEl.addEventListener('pointercancel', resetJoy);
+
+jumpBtn.addEventListener('pointerdown', () => {
+ if (mode === 'game' && jumps < 2) { pVel.y = jumpForce; jumps++; }
+});
+
+renderer.domElement.addEventListener('pointerdown', (e) => {
+ if (mode !== 'game' || e.pointerType === 'mouse' && config.mobile) return;
+ if (joyId !== null && e.pointerId === joyId) return;
+ draggingCamera = true;
+ cameraPointerId = e.pointerId;
+ lastCamX = e.clientX;
+ lastCamY = e.clientY;
+ renderer.domElement.setPointerCapture(e.pointerId);
+});
+
+renderer.domElement.addEventListener('pointermove', (e) => {
+ if (!draggingCamera || mode !== 'game' || e.pointerId !== cameraPointerId) return;
+ const dx = e.clientX - lastCamX;
+ const dy = e.clientY - lastCamY;
+ lastCamX = e.clientX;
+ lastCamY = e.clientY;
+ camYaw -= dx * 0.02;
+ camPitch += dy * 0.01;
+ camPitch = Math.max(-0.2, Math.min(0.75, camPitch));
+});
+
+function stopCameraDrag(e) {
+ if (e.pointerId === cameraPointerId) {
+  draggingCamera = false;
+  cameraPointerId = null;
+ }
+}
+renderer.domElement.addEventListener('pointerup', stopCameraDrag);
+renderer.domElement.addEventListener('pointercancel', stopCameraDrag);
+
+function animate() {
+ requestAnimationFrame(animate);
+ if (mode === 'game') {
+  const forwardX = Math.sin(camYaw);
+  const forwardZ = Math.cos(camYaw);
+  const rightX = Math.cos(camYaw);
+  const rightZ = -Math.sin(camYaw);
+
+  const mw = keys.w || joyY < -0.2;
+  const ms = keys.s || joyY > 0.2;
+  const ma = keys.a || joyX < -0.2;
+  const md = keys.d || joyX > 0.2;
+
+  if (mw) { pVel.x += forwardX * -accel; pVel.z += forwardZ * -accel; }
+  if (ms) { pVel.x += forwardX * accel; pVel.z += forwardZ * accel; }
+  if (ma) { pVel.x += rightX * -accel; pVel.z += rightZ * -accel; }
+  if (md) { pVel.x += rightX * accel; pVel.z += rightZ * accel; }
+
+  pVel.x *= friction;
+  pVel.z *= friction;
+  pVel.y -= 0.015;
+  player.position.add(pVel);
+
+  const plBox = new THREE.Box3().setFromObject(player);
+  for (const p of platforms) {
+   const pBox = new THREE.Box3().setFromObject(p);
+   const overlapX = plBox.max.x > pBox.min.x && plBox.min.x < pBox.max.x;
+   const overlapZ = plBox.max.z > pBox.min.z && plBox.min.z < pBox.max.z;
+   const playerBottom = plBox.min.y;
+   const platformTop = pBox.max.y;
+   if (overlapX && overlapZ && pVel.y <= 0) {
+    if (playerBottom <= platformTop + 0.2 && playerBottom >= platformTop - 1) {
+     player.position.y = platformTop + 0.75;
+     pVel.y = 0;
+     jumps = 0;
+     break;
+    }
+   }
+  }
+
+  if (player.position.y < -25) { mode = 'gameover'; updateUI(); }
+
+  for (let i = coins.length - 1; i >= 0; i--) {
+   const c = coins[i];
+   c.rotation.z += 0.03;
+   if (player.position.distanceTo(c.position) < 1.1) {
+    scene.remove(c);
+    coins.splice(i, 1);
+    config.coins += 10;
+    saveConfig();
+    updateUI();
+   }
+  }
+
+  if (goal && player.position.distanceTo(goal.position) < 2.2) {
+   currentLevel++;
+   buildLevel();
+   updateUI();
+  }
+
+  faceCamera();
+  updateCamera();
+ }
+ renderer.render(scene, camera);
+}
+
+window.addEventListener('resize', () => {
+ camera.aspect = innerWidth / innerHeight;
+ camera.updateProjectionMatrix();
+ renderer.setSize(innerWidth, innerHeight);
+});
+
+saveConfig();
+updateUI();
+animate();
+</script>
+</body>
+</html>
